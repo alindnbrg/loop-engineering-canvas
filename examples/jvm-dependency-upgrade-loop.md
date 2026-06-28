@@ -214,3 +214,14 @@ def refine_recipe(client, recipe: str, build_errors: str) -> str:
 ```
 
 The snippets are illustrative skeletons, not a framework … the point is that the deterministic engine does the migration, and the loop refines the rule against the goal.
+
+## Resources
+
+- [OpenRewrite docs](https://docs.openrewrite.org/) … the deterministic recipe engine, 3,500+ recipes.
+- [OpenRewrite on GitHub](https://github.com/openrewrite/rewrite) … the engine source.
+- [Moderne: AI-powered recipe authoring](https://www.moderne.ai/blog/ai-powered-openrewrite-recipe-authoring-with-claude-skill) … agents write recipes, tests verify (Jan 2026).
+- [Migrate to Spring Boot 3](https://docs.openrewrite.org/running-recipes/popular-recipe-guides/migrate-to-spring-3) … a major-version migration as a chained recipe.
+- [Duolingo: JVM golden-path upgrades](https://blog.duolingo.com/automating-jvm-golden-path/) … OpenRewrite-plus-AI production case study.
+- [Renovate](https://docs.renovatebot.com/) … automated dependency-bump PRs.
+- [Dependabot](https://docs.github.com/code-security/dependabot) … automated dependency-bump PRs.
+- [LLM Agents for Automated Dependency Upgrades](https://arxiv.org/pdf/2510.03480) … the deterministic-first, model-for-residual research.

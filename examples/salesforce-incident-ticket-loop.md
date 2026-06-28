@@ -2,7 +2,7 @@
 
 Keep business-critical systems running 24/7 when incidents are tracked as Salesforce Cases. When an alert opens a Case, the loop works it like a good on-call engineer: read the Case, pull the service's telemetry, run the runbook most likely to clear the breach, verify the service against its SLO, and either resolve and document the Case or hand it to a human. The deterministic work is the runbooks, the RBAC scope, and the SLO check, not the model … the model only investigates and picks the next runbook.
 
-This mirrors the mid-2026 production pattern: *investigate-and-recommend with human-approved execution*, e.g. [Salesforce Agentforce IT Service](https://www.salesforce.com/news/stories/agentforce-it-service-announcement/) on the Case layer and an SRE agent like [AWS DevOps Agent](https://aws.amazon.com/blogs/devops/automating-incident-investigation-with-aws-devops-agent-and-salesforce-mcp-server/) reading and writing the Case over MCP. Full autonomy is not the bar … on IBM's ITBench the best models resolve only ~14% of incidents end to end, so a good loop scopes itself to known incident classes with runbooks and escalates the rest.
+This mirrors the mid-2026 production pattern: *investigate-and-recommend with human-approved execution*, e.g. [Salesforce Agentforce IT Service](https://www.salesforce.com/news/stories/agentforce-it-service-announcement/) on the Case layer and an SRE agent like [AWS DevOps Agent](https://aws.amazon.com/blogs/devops/automating-incident-investigation-with-aws-devops-agent-and-salesforce-mcp-server/) reading and writing the Case over MCP. Full autonomy is not the bar … on IBM's ITBench the best models resolve only ~11% of SRE incidents end to end, so a good loop scopes itself to known incident classes with runbooks and escalates the rest.
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────┐
@@ -189,11 +189,9 @@ def next_runbook(client, incident, runbooks):
 
 The snippets are illustrative skeletons, not a framework … the runbooks and the SLO do the work deterministically; the loop only investigates, picks the next step, gates risk behind a human, and stops the moment the service is green and the Case is documented, or escalates fast.
 
-## Grounding (June 2026)
+## Resources
 
-The mid-2026 production state of the art is investigate-and-recommend with human-approved execution, deterministic governance around a scoped model:
-
-- [Salesforce Agentforce IT Service](https://www.salesforce.com/news/stories/agentforce-it-service-announcement/) … agent-first ITSM with an agentic CMDB / Service Graph; turns Cases into 24/7 resolution (GA October 2025).
-- [AWS DevOps Agent + Salesforce MCP](https://aws.amazon.com/blogs/devops/automating-incident-investigation-with-aws-devops-agent-and-salesforce-mcp-server/) … the agent reads a Case via `soql_query` and writes findings back via `create_sobject_record`; humans implement the mitigations.
-- [Google SRE agentic AI principles](https://cloud.google.com/blog/products/devops-sre/how-google-sre-is-using-agentic-ai-to-improve-operations) … transparency over black-box, strong identity/RBAC, reliability SLOs, Progressive Authorization, and "don't replace automation that already works".
-- IBM ITBench … top models autonomously resolve only ~14% of SRE scenarios end to end, which is why production loops stay runbook-scoped and escalate the rest.
+- [Salesforce Agentforce IT Service](https://www.salesforce.com/news/stories/agentforce-it-service-announcement/) … agent-first ITSM with an agentic CMDB (GA Oct 2025).
+- [AWS DevOps Agent + Salesforce MCP](https://aws.amazon.com/blogs/devops/automating-incident-investigation-with-aws-devops-agent-and-salesforce-mcp-server/) … agent reads and writes the Case over MCP.
+- [Google SRE: agentic AI principles](https://cloud.google.com/blog/products/devops-sre/how-google-sre-is-using-agentic-ai-to-improve-operations) … transparency, RBAC, SLOs, progressive authorization.
+- [IBM ITBench](https://github.com/itbench-hub/ITBench) … benchmark; top models resolve only ~11% of SRE scenarios.
