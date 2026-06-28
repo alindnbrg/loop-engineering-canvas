@@ -74,5 +74,5 @@ Position is a second lens: the **goal** sits at the center because everything se
 
 ## The examples
 
-- [jvm dependency upgrade loop](examples/jvm-dependency-upgrade-loop.md) ≫ bump a JVM dependency, let OpenRewrite migrate the breaking changes, refine the recipe until the build is green, open a PR. The model only steers the recipe.
-- [salesforce incident ticket loop](examples/salesforce-incident-ticket-loop.md) ≫ work a Salesforce incident Case for a 24/7 system: run the runbook that clears it, verify against the SLO, resolve and document or escalate. The model only investigates and picks the runbook.
+- [jvm dependency upgrade loop](examples/jvm-dependency-upgrade-loop.md) ≫ OpenRewrite migrates the breaking changes; the model only steers the recipe.
+- [salesforce incident ticket loop](examples/salesforce-incident-ticket-loop.md) ≫ runbooks mitigate the incident; the model only picks the next one.
