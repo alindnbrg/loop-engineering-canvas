@@ -76,3 +76,4 @@ Position is a second lens: the **goal** sits at the center because everything se
 
 - [jvm dependency upgrade loop](examples/jvm-dependency-upgrade-loop.md) ≫ OpenRewrite migrates the breaking changes; the model only steers the recipe.
 - [salesforce incident ticket loop](examples/salesforce-incident-ticket-loop.md) ≫ runbooks mitigate the incident; the model only picks the next one.
+- [vulnerability discovery loop](examples/vulnerability-discovery-loop.md) ≫ a sandbox compiles and runs the proof; the model only proposes the bug.

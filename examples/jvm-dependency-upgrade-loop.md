@@ -207,7 +207,7 @@ def refine_recipe(client, recipe: str, build_errors: str) -> str:
     user = (f"Current recipe:\n{recipe}\n\nBuild still failing:\n{build_errors}\n\n"
             "Return an updated recipe that resolves these errors.")
     return client.messages.create(
-        model="claude-haiku-4-5-20251001",   # recipe + compiler are the source of truth; a small model is fine
+        model=MODEL,   # recipe + compiler are the source of truth; a small model is fine
         system=SYSTEM,
         messages=[{"role": "user", "content": user}],
     ).content
@@ -219,7 +219,7 @@ The snippets are illustrative skeletons, not a framework … the point is that t
 
 - [OpenRewrite docs](https://docs.openrewrite.org/) … the deterministic recipe engine, 3,500+ recipes.
 - [OpenRewrite on GitHub](https://github.com/openrewrite/rewrite) … the engine source.
-- [Moderne: AI-powered recipe authoring](https://www.moderne.ai/blog/ai-powered-openrewrite-recipe-authoring-with-claude-skill) … agents write recipes, tests verify (Jan 2026).
+- [Moderne: AI agents meet auto-refactoring](https://www.moderne.ai/blog/open-source-auto-refactoring-meets-ai-agent-to-modernize-fintech-software-at-scale) … AI agents drive OpenRewrite recipes at scale, tests verify.
 - [Migrate to Spring Boot 3](https://docs.openrewrite.org/running-recipes/popular-recipe-guides/migrate-to-spring-3) … a major-version migration as a chained recipe.
 - [Duolingo: JVM golden-path upgrades](https://blog.duolingo.com/automating-jvm-golden-path/) … OpenRewrite-plus-AI production case study.
 - [Renovate](https://docs.renovatebot.com/) … automated dependency-bump PRs.

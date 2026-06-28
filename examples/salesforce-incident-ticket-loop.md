@@ -181,7 +181,7 @@ def next_runbook(client, incident, runbooks):
     user = (f"Case: {incident.summary()}\nTelemetry: {incident.telemetry()}\n"
             f"Tried: {incident.tried}\nRunbooks: {[r.id for r in runbooks]}")
     return client.messages.create(
-        model="claude-haiku-4-5-20251001",   # runbooks + SLO + RBAC are the source of truth
+        model=MODEL,   # runbooks + SLO + RBAC are the source of truth; a small model is fine
         system=SYSTEM,
         messages=[{"role": "user", "content": user}],
     )  # -> {runbook_id, params, confidence, rationale}
