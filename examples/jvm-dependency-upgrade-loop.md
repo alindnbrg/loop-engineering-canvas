@@ -151,7 +151,7 @@ After each `mvn verify`:
 ```python
 def run_unit(unit, state, budget, now) -> str:   # MAX_REFINES, no_progress, Budget from [6]
     ga, ver = unit["ga"], unit["target"]
-    recipe = state.known_recipe(ga, ver) or draft_recipe(ga, ver)   # [9] reuse memory if any
+    recipe = state.known_recipe(ga, ver) or draft_recipe(ga, ver)   # reuse a proven recipe [5], else draft [9]
     prev = None
     for _ in range(MAX_REFINES + 1):
         if budget.exhausted():
