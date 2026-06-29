@@ -22,8 +22,6 @@ Keep a JVM project's dependencies current without hand-migrating every breaking 
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-Filled goal-first, model last. Most of the engineering is the goal, the action boundary, and the limits. The migration itself is OpenRewrite's job; the model only writes and refines the recipe that drives it. That is the point: the loop leans on a deterministic tool, not on the model.
-
 ## The fields
 
 ### [1] Goal
@@ -151,9 +149,9 @@ After each `mvn verify`:
 - never auto-merge.
 
 ```python
-def run_unit(unit, model, state, budget, now) -> str:   # MAX_REFINES, no_progress, Budget from [6]
+def run_unit(unit, state, budget, now) -> str:   # MAX_REFINES, no_progress, Budget from [6]
     ga, ver = unit["ga"], unit["target"]
-    recipe = state.known_recipe(ga, ver) or model.draft_recipe(ga, ver)   # reuse memory if any
+    recipe = state.known_recipe(ga, ver) or draft_recipe(ga, ver)   # [9] reuse memory if any
     prev = None
     for _ in range(MAX_REFINES + 1):
         if budget.exhausted():
@@ -166,7 +164,7 @@ def run_unit(unit, model, state, budget, now) -> str:   # MAX_REFINES, no_progre
         if no_progress(prev, result.detail):                # [6] circuit breaker
             break
         prev = result.detail
-        recipe = model.refine_recipe(recipe, result.detail) # [9] the model only steers the rule
+        recipe = refine_recipe(recipe, result.detail)       # [9] the model only steers the rule
     state.remember(ga, ver, recipe, "failed", now)
     escalate(ga, ver, errors=prev)
     return "escalated"
@@ -177,40 +175,53 @@ def run_unit(unit, model, state, budget, now) -> str:   # MAX_REFINES, no_progre
 Per run: the dependency/version, the recipe and each refinement, compile + test results, iterations, cost, and the PR link or escalation. Metrics: PR-open rate, share that converged on a known recipe with no model call, refinements per upgrade, escalation rate, cost per upgrade. Alerts: a dependency failing N nights running, budget exceeded, any out-of-scope write (the `PermissionError` above).
 
 ```python
-import logging
+import logging, collections
 log = logging.getLogger("dep-loop")
+metrics = collections.Counter()                    # cheap in-process metrics; ship to your TSDB
 
 def trace(unit, refinement, gate_result, decision, cost):
-    log.info("dep-loop", extra={
-        "ga": unit["ga"], "version": unit["target"],
-        "refinement": refinement, "build": gate_result.detail[:200],
-        "decision": decision, "cost_tokens": cost,
+    log.info("dep-loop", extra={                   # one structured record per attempt
+        "ga": unit["ga"], "version": unit["target"], "refinement": refinement,
+        "build": gate_result.detail[:200], "decision": decision, "cost_tokens": cost,
     })
+    metrics[decision] += 1                         # shipped / escalated / stopped
+    metrics["cost_tokens"] += cost
+
+def check_alerts():
+    runs = metrics["shipped"] + metrics["escalated"] + metrics["stopped"]
+    if runs and metrics["escalated"] / runs > 0.5:           # most upgrades failing
+        page("dep-loop: escalation rate > 50%")
+    if metrics["cost_tokens"] > DAILY_TOKEN_BUDGET:          # budget guard (see [6])
+        page("dep-loop: over daily token budget")
 ```
 
 ### [9] Model & Prompt
 
 The model never migrates code by hand. It reads the build failure and writes or refines an **OpenRewrite recipe** … a deterministic rule that does the migration when re-run. OpenRewrite carries it out across the whole codebase; the model only adjusts the rule. So the model stays small and swappable: a single mid-tier model is plenty, because the recipe and the compiler are the source of truth, not the model's cleverness. Swap it cheaper or stronger without touching the rest of the canvas.
 
-The prompt gives it the dependency, the current recipe, and the build errors, and constrains its output to a recipe.
+Wire the model behind one adapter so the rest of the loop is model-agnostic (swap it freely). The system prompt pins the job and the output format; the user message hands over the current recipe and the build errors; a cheap parse guards the result before the build re-checks it for real.
 
 ```python
+MODEL = "your-mid-tier-model"        # the compiler is the source of truth; small is fine
+
+def call_model(model: str, system: str, user: str) -> str:
+    # the loop's ONLY provider-specific line; return the completion text
+    return llm.complete(model=model, system=system, user=user)   # drop in your SDK
+
 SYSTEM = """You upgrade one JVM dependency by writing an OpenRewrite recipe.
+You never edit source files directly: you return a rewrite.yml that OpenRewrite applies
+deterministically. Compose from existing recipes where possible (UpgradeDependencyVersion,
+ChangeType, ChangeMethodName, migration recipes). Given the build errors from the last run,
+return a recipe that resolves them. Output only the YAML for rewrite.yml, no prose."""
 
-You never edit source files directly. You produce or refine a recipe (rewrite.yml)
-that OpenRewrite then applies deterministically. Given the target dependency and the
-build errors from the last run, return an updated recipe that resolves them, composed
-from existing recipes where possible (UpgradeDependencyVersion, ChangeType,
-ChangeMethodName, migration recipes). Output only the recipe YAML."""
+def refine_recipe(recipe: str, build_errors: str) -> str:
+    user = f"Current recipe:\n{recipe}\n\nBuild still failing:\n{build_errors}"
+    out = strip_code_fences(call_model(MODEL, SYSTEM, user))   # models love to wrap YAML in ```
+    assert parses_yaml(out), "model returned an invalid recipe"   # cheap guard; the build is the real gate
+    return out
 
-def refine_recipe(client, recipe: str, build_errors: str) -> str:
-    user = (f"Current recipe:\n{recipe}\n\nBuild still failing:\n{build_errors}\n\n"
-            "Return an updated recipe that resolves these errors.")
-    return client.messages.create(
-        model=MODEL,   # recipe + compiler are the source of truth; a small model is fine
-        system=SYSTEM,
-        messages=[{"role": "user", "content": user}],
-    ).content
+def draft_recipe(ga: str, ver: str) -> str:                  # the first pass, no errors yet
+    return refine_recipe(f"# upgrade {ga} to {ver}", build_errors="(none yet)")
 ```
 
 The snippets are illustrative skeletons, not a framework … the point is that the deterministic engine does the migration, and the loop refines the rule against the goal.

@@ -24,8 +24,6 @@ This mirrors the mid-2026 production pattern: *investigate-and-recommend with hu
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-Filled goal-first, model last. The engineering is in the goal (the SLO health signal, not the model's say-so), the action boundary (runbooks scoped by RBAC, risky steps behind human approval, Salesforce writes via MCP), and the limits (mitigate within SLA or page a human). The model only investigates and picks the next runbook. That is the point: lean on deterministic runbooks and governance, not on the model.
-
 ## The fields
 
 ### [1] Goal
@@ -127,20 +125,21 @@ def no_progress(prev, detail): return prev is not None and prev == detail
 After each runbook + SLO check (Progressive Authorization, the way Google SRE frames it): a low-risk step runs automatically; a risky step is proposed and waits for human approval; SLO green and held → document and close the Case; no-progress or capped or SLA-breaching → escalate and page with the full timeline. Never execute a risky action without approval; never close without the SLO green.
 
 ```python
-def handle(incident, case, model, now) -> str:   # SLA, CONFIDENCE, MAX_STEPS from [6]
+def handle(incident, case, runbooks, now) -> str:   # SLA, CONFIDENCE, MAX_STEPS from [6]
     prev = None
     for step in range(MAX_STEPS):
         if sla_breaching(case, now()):
             return escalate(case, reason="approaching SLA")         # page on-call
-        plan = model.next_runbook(incident)         # [9] investigate -> pick runbook
-        if plan.confidence < CONFIDENCE:
+        plan = next_step(incident, runbooks)        # [9] investigate -> pick a runbook
+        if plan["confidence"] < CONFIDENCE:
             return escalate(case, reason="low confidence", plan=plan)
+        runbook = runbooks[plan["runbook_id"]]      # resolve the approved runbook
         try:
-            run_runbook(case, plan.runbook, plan.params)            # [4] auto, or…
+            run_runbook(case, runbook, plan["params"])              # [4] auto, or…
         except NeedsApproval as a:
             return escalate(case, approval=a)                       # risky -> human approves
         result = gate(case)                         # [1] SLO green + documented?
-        incident.record(plan.runbook.id, result.detail, now())
+        incident.record(plan["runbook_id"], result.detail, now())
         if result.passed:
             close(case); return "resolved"
         if no_progress(prev, result.detail):        # stuck -> escalate
@@ -154,37 +153,60 @@ def handle(incident, case, model, now) -> str:   # SLA, CONFIDENCE, MAX_STEPS fr
 Per Case: the runbooks run and **why** (and which options were rejected … Google's transparency-over-black-box principle), telemetry snapshots, SLO results, decisions, time-to-mitigate, approvals, escalation. Metrics: auto-resolve rate, MTTR, SLA compliance, escalation rate, steps per incident. Alerts: a service failing repeatedly, SLA budget exceeded, any action attempted outside RBAC scope.
 
 ```python
+import logging, collections
+log = logging.getLogger("incident")
+metrics = collections.Counter()
+
 def trace(case, step, plan, result, decision):
-    log.info("incident", extra={
+    log.info("incident", extra={                   # one structured record per step
         "case": case.Id, "service": case.service, "step": step,
-        "runbook": plan.runbook.id, "rationale": plan.rationale,    # why + what was ruled out
+        "runbook": plan["runbook_id"], "rationale": plan["rationale"],   # why + what was ruled out
         "slo": result.detail[:200], "decision": decision, "elapsed_s": elapsed(case),
     })
-# metrics: auto-resolve rate, MTTR, SLA compliance, escalation rate, steps/case
+    metrics[decision] += 1                         # resolved / escalated / stopped
+
+def check_alerts():
+    runs = sum(metrics.values())
+    if runs and metrics["resolved"] / runs < 0.5:            # too few auto-resolved
+        page("incident: auto-resolve rate < 50%")
+    if metrics["escalated"] > ESCALATION_BUDGET:             # on-call drowning
+        page("incident: escalations over budget")
+# headline metrics: auto-resolve rate, MTTR, SLA compliance, escalation rate, steps/case
 ```
 
 ### [9] Model & Prompt
 
-The model never runs commands and never writes to Salesforce directly. It investigates … reads the Case and the telemetry … and picks the next runbook and parameters from the approved library, with a confidence and a one-line rationale. The runbooks, the SLO check, and RBAC are the source of truth, so a single mid-tier model is plenty; swap it without touching the rest of the canvas. This is the scoped-LLM design the labs converged on: keep the model's role minimal, let deterministic infrastructure do the governance.
+The model never runs commands and never writes to Salesforce directly. It investigates … reads the Case and the telemetry … and picks the next runbook from the approved library, with a confidence and a one-line rationale. Wire it behind one adapter, force JSON, validate it, and check the chosen runbook actually exists before acting on it. The runbooks, the SLO check, and RBAC are the source of truth, so a single mid-tier model is plenty; swap it without touching the rest of the canvas.
 
 ```python
-SYSTEM = """You are first responder for one incident, tracked as a Salesforce Case
-on a business-critical service.
+import json
+MODEL = "your-mid-tier-model"     # runbooks + SLO + RBAC are the source of truth; small is fine
 
-You do not run commands and you do not write to Salesforce directly. Given the case and
-the latest telemetry, choose the next runbook and parameters from the approved library,
-with a confidence (0-1) and a one-line rationale (including what you ruled out). Prefer
-the least-risky step that could clear the SLO breach. If nothing safe is likely to help,
-or the step is risky or novel, escalate. Output {runbook_id, params, confidence, rationale}."""
+def call_model(model: str, system: str, user: str) -> str:
+    return llm.complete(model=model, system=system, user=user)   # the one provider-specific line
 
-def next_runbook(client, incident, runbooks):
+def ask_json(model, system, user, *, keys, retries=2) -> dict:
+    for _ in range(retries + 1):                  # make the model return parseable JSON
+        raw = call_model(model, system, user)
+        try: obj = json.loads(raw[raw.index("{"): raw.rindex("}") + 1])
+        except (ValueError, json.JSONDecodeError): obj = {}
+        if all(k in obj for k in keys): return obj
+        user += f"\n\nReturn ONLY JSON with keys {keys}."
+    raise ValueError("no valid structured output")
+
+SYSTEM = """You are first responder for one incident, tracked as a Salesforce Case on a
+business-critical service. You do not run commands or write to Salesforce. Given the case
+and the latest telemetry, choose the next runbook and parameters from the approved library,
+with a confidence (0-1) and a one-line rationale (including what you ruled out). Prefer the
+least-risky step that could clear the SLO breach; if nothing safe is likely to help, escalate."""
+
+def next_step(incident, runbooks) -> dict:        # runbooks: {id: runbook}
     user = (f"Case: {incident.summary()}\nTelemetry: {incident.telemetry()}\n"
-            f"Tried: {incident.tried}\nRunbooks: {[r.id for r in runbooks]}")
-    return client.messages.create(
-        model=MODEL,   # runbooks + SLO + RBAC are the source of truth; a small model is fine
-        system=SYSTEM,
-        messages=[{"role": "user", "content": user}],
-    )  # -> {runbook_id, params, confidence, rationale}
+            f"Tried: {incident.tried}\nRunbooks: {list(runbooks)}")
+    plan = ask_json(MODEL, SYSTEM, user,
+                    keys=["runbook_id", "params", "confidence", "rationale"])
+    assert plan["runbook_id"] in runbooks, "model picked an unknown runbook"   # never trust the id
+    return plan
 ```
 
 The snippets are illustrative skeletons, not a framework … the runbooks and the SLO do the work deterministically; the loop only investigates, picks the next step, gates risk behind a human, and stops the moment the service is green and the Case is documented, or escalates fast.
