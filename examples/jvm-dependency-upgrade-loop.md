@@ -56,11 +56,11 @@ Nightly cron plus an advisory webhook. One unit of work = one dependency at one 
 import subprocess
 
 def discover_outdated() -> list[dict]:
-    out = subprocess.run(
-        ["mvn", "-q", "versions:display-dependency-updates", "-DoutputFormat=json"],
-        capture_output=True, text=True, check=True,
+    subprocess.run(
+        ["mvn", "-q", "versions:display-dependency-updates", "-Dversions.outputFile=updates.txt"],
+        check=True,
     )
-    return parse_updates(out.stdout)   # -> [{"ga": "com.x:y", "target": "3.0.0"}, ...]
+    return parse_updates(read("updates.txt"))   # -> [{"ga": "com.x:y", "target": "3.0.0"}, ...]
 
 def units_of_work(state) -> list[dict]:
     return [u for u in discover_outdated()
@@ -135,7 +135,8 @@ class Budget:
     def exhausted(self) -> bool: return self.spent >= self.cap
 
 def no_progress(prev_errors, errors) -> bool:
-    return prev_errors is not None and prev_errors == errors
+    # normalize away timestamps and paths, or identical failures never compare equal
+    return prev_errors is not None and normalized(prev_errors) == normalized(errors)
 ```
 
 ### [7] Control
@@ -165,6 +166,7 @@ def run_unit(unit, state, budget, now) -> str:   # MAX_REFINES, no_progress, Bud
             break
         prev = result.detail
         recipe = refine_recipe(recipe, result.detail)       # [9] the model only steers the rule
+        budget.charge(last_call_tokens())                   # [6] a ceiling only works if fed
     state.remember(ga, ver, recipe, "failed", now)
     escalate(ga, ver, errors=prev)
     return "escalated"
@@ -212,12 +214,14 @@ SYSTEM = """You upgrade one JVM dependency by writing an OpenRewrite recipe.
 You never edit source files directly: you return a rewrite.yml that OpenRewrite applies
 deterministically. Compose from existing recipes where possible (UpgradeDependencyVersion,
 ChangeType, ChangeMethodName, migration recipes). Given the build errors from the last run,
-return a recipe that resolves them. Output only the YAML for rewrite.yml, no prose."""
+return a recipe that resolves them. Name the top-level recipe `upgrade`; the loop activates
+it by that name. Output only the YAML for rewrite.yml, no prose."""
 
 def refine_recipe(recipe: str, build_errors: str) -> str:
     user = f"Current recipe:\n{recipe}\n\nBuild still failing:\n{build_errors}"
     out = strip_code_fences(call_model(MODEL, SYSTEM, user))   # models love to wrap YAML in ```
     assert parses_yaml(out), "model returned an invalid recipe"   # cheap guard; the build is the real gate
+    assert "name: upgrade" in out, "recipe must be named upgrade"   # [7] activates it by name … enforce, don't hope
     return out
 
 def draft_recipe(ga: str, ver: str) -> str:                  # the first pass, no errors yet
@@ -228,7 +232,7 @@ The snippets are illustrative skeletons, not a framework … the point is that t
 
 ## Resources
 
-- [OpenRewrite docs](https://docs.openrewrite.org/) … the deterministic recipe engine, 3,500+ recipes.
+- [OpenRewrite docs](https://docs.openrewrite.org/) … the deterministic recipe engine and its recipe catalog.
 - [OpenRewrite on GitHub](https://github.com/openrewrite/rewrite) … the engine source.
 - [Moderne: AI agents meet auto-refactoring](https://www.moderne.ai/blog/open-source-auto-refactoring-meets-ai-agent-to-modernize-fintech-software-at-scale) … AI agents drive OpenRewrite recipes at scale, tests verify.
 - [Migrate to Spring Boot 3](https://docs.openrewrite.org/running-recipes/popular-recipe-guides/migrate-to-spring-3) … a major-version migration as a chained recipe.

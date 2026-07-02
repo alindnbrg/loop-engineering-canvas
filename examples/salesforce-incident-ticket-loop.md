@@ -2,7 +2,7 @@
 
 Keep business-critical systems running 24/7 when incidents are tracked as Salesforce Cases. When an alert opens a Case, the loop works it like a good on-call engineer: read the Case, pull the service's telemetry, run the runbook most likely to clear the breach, verify the service against its SLO, and either resolve and document the Case or hand it to a human. The deterministic work is the runbooks, the RBAC scope, and the SLO check, not the model … the model only investigates and picks the next runbook.
 
-This mirrors how production incident loops are built: *investigate-and-recommend with human-approved execution*, e.g. [Salesforce Agentforce IT Service](https://www.salesforce.com/news/stories/agentforce-it-service-announcement/) on the Case layer and an SRE agent like [AWS DevOps Agent](https://aws.amazon.com/blogs/devops/automating-incident-investigation-with-aws-devops-agent-and-salesforce-mcp-server/) reading and writing the Case over MCP. Full autonomy is not the bar … on IBM's ITBench the best models resolve only ~11% of SRE incidents end to end, so a good loop scopes itself to known incident classes with runbooks and escalates the rest.
+This mirrors how production incident loops are built: *investigate-and-recommend with human-approved execution*, e.g. [Salesforce Agentforce IT Service](https://www.salesforce.com/news/stories/agentforce-it-service-announcement/) on the Case layer and an SRE agent like the AWS DevOps Agent reading and writing the Case over MCP. Full autonomy is not the bar … on IBM's ITBench the best models resolve only 13.8% of SRE scenarios end to end, so a good loop scopes itself to known incident classes with runbooks and escalates the rest.
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────┐
@@ -53,7 +53,7 @@ Business-critical systems must run 24/7, and incidents arrive as Cases at all ho
 
 ### [3] Trigger
 
-An alert (CloudWatch, Datadog, PagerDuty, …) opens or routes to a Salesforce incident Case. One unit of work = one Case. A per-service lock so two runbooks don't fight the same system; unrelated Cases run in parallel.
+An alert (CloudWatch, Datadog, PagerDuty, …) opens or routes to a Salesforce incident Case; a human approval decision re-enters the same Case as a new run. One unit of work = one Case. A per-service lock so two runbooks don't fight the same system; unrelated Cases run in parallel.
 
 ```python
 # Unit of work = one incident Case. An alert opens/routes it; one in-flight
@@ -61,7 +61,6 @@ An alert (CloudWatch, Datadog, PagerDuty, …) opens or routes to a Salesforce i
 def on_case(case) -> dict:
     return {"case_id": case.Id, "service": case.Service__c,
             "severity": case.Severity__c, "opened_at": case.CreatedDate}
-# per-service lock; unrelated cases run in parallel
 ```
 
 ### [4] Actions
@@ -137,7 +136,7 @@ def handle(incident, case, runbooks, now) -> str:   # SLA, CONFIDENCE, MAX_STEPS
         try:
             run_runbook(case, runbook, plan["params"])              # [4] auto, or…
         except NeedsApproval as a:
-            return escalate(case, approval=a)                       # risky -> human approves
+            return escalate(case, approval=a)                       # risky -> approval re-enters via [3]
         result = gate(case)                         # [1] SLO green + documented?
         incident.record(plan["runbook_id"], result.detail, now())
         if result.passed:
@@ -198,7 +197,8 @@ SYSTEM = """You are first responder for one incident, tracked as a Salesforce Ca
 business-critical service. You do not run commands or write to Salesforce. Given the case
 and the latest telemetry, choose the next runbook and parameters from the approved library,
 with a confidence (0-1) and a one-line rationale (including what you ruled out). Prefer the
-least-risky step that could clear the SLO breach; if nothing safe is likely to help, escalate."""
+least-risky step that could clear the SLO breach; if nothing safe is likely to help, return
+confidence 0 so the loop escalates."""
 
 def next_step(incident, runbooks) -> dict:        # runbooks: {id: runbook}
     user = (f"Case: {incident.summary()}\nTelemetry: {incident.telemetry()}\n"
@@ -216,4 +216,4 @@ The snippets are illustrative skeletons, not a framework … the runbooks and th
 - [Salesforce Agentforce IT Service](https://www.salesforce.com/news/stories/agentforce-it-service-announcement/) … agent-first ITSM with an agentic CMDB (GA Oct 2025).
 - [AWS DevOps Agent + Salesforce MCP](https://aws.amazon.com/blogs/devops/automating-incident-investigation-with-aws-devops-agent-and-salesforce-mcp-server/) … agent reads and writes the Case over MCP.
 - [Google SRE: agentic AI principles](https://cloud.google.com/blog/products/devops-sre/how-google-sre-is-using-agentic-ai-to-improve-operations) … transparency, RBAC, SLOs, progressive authorization.
-- [IBM ITBench](https://github.com/itbench-hub/ITBench) … benchmark; top models resolve only ~11% of SRE scenarios.
+- [IBM ITBench](https://github.com/itbench-hub/ITBench) … benchmark; top models resolve only 13.8% of SRE scenarios.

@@ -1,6 +1,7 @@
 # Loop Engineering Canvas
 
 A template to think through what an agentic loop needs before you build it. It doesn't build anything … it just helps you sort out what you're trying to do, and what could go wrong, while changing your mind is still cheap.
+
 ## The idea
 
 Stop using the agent to solve the problem; build the system that solves it … the thing that builds the thing. At the heart is the **goal**: a definition of done that something other than you can check. Everything else … when it runs, what it may touch, when it stops … exists to hit that goal reliably. The model and prompt are the last, most swappable part: the engine you drop in once the harness around it holds.

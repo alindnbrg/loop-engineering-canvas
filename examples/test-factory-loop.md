@@ -144,6 +144,7 @@ def run_unit(mutant, state, budget) -> str:    # budget = the module's Budget(MO
         if budget.exhausted():
             return "stopped: budget"
         test_file = write_test(draft_test(mutant, feedback))   # [9] the model's whole job
+        budget.charge(last_call_tokens())                      # [6] a ceiling only works if fed
         assert_in_scope(changed_files())                       # [4]
         result = gate(test_file, mutant)                       # [1]
         if result.passed:
