@@ -15,7 +15,7 @@ Read it left to right, but it cycles. A **trigger** starts a run; the loop loads
 
 ## The canvas
 
-The whole loop fits on one page … enough to sketch it, challenge it, and find the gaps before you build. Position carries meaning; read the canvas as a map, not the definitions (those are in the table below).
+The whole loop fits on one page … enough to sketch it, challenge it, and find the gaps before you build. Position carries meaning: the **goal** sits at the center because everything serves it, **problem** frames the page from the top, **observability** records every run along the bottom. Read the canvas as a map; the definitions live in the table below.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -40,7 +40,7 @@ The whole loop fits on one page … enough to sketch it, challenge it, and find 
 
 ## The fields
 
-Each field, the question it answers, and what to watch for.
+Each field, the question it answers, and what to watch for. Work them in numbered order … not the order a run executes, but outside-in: pin down what success is, build the harness around it, then drop in the engine.
 
 | # | Field | The question it answers | Watch for |
 |---|-------|-------------------------|-----------|
@@ -53,24 +53,6 @@ Each field, the question it answers, and what to watch for.
 | 7 | **Control** | After each result, which move is allowed? | Continue, retry (with feedback), repair, escalate, pause, stop done, stop failed, roll back, ship. Plus what triggers escalate vs rollback. (The hard stops live in Limits.) |
 | 8 | **Observability** | Can you reconstruct any run after the fact? | Trace: trigger, unit of work, tools called, things touched, goal/gate results, control decisions, cost, approvals, final status. Metrics: success rate, retries, escalation rate, cost per run. Alerts on repeated failure, budget exceeded, policy violation. |
 | 9 | **Model & Prompt** | *Last:* which model and prompt run inside everything above? | The swappable engine … "the model is the engine, the harness is the car." Pick it last and expect to change it: model and tier, the prompt, single vs multi agent, tools, and the inner reasoning loop (reason-act-observe / reflection / evaluator-optimizer). The prompt is not the only place safety, permissions, state, and the goal live. |
-
-## The order
-
-Work the numbers in order. It's not the order a run executes … it's outside-in: pin down what success is, then build the harness around it, then drop in the engine.
-
-| Order | Fill in | In one line |
-|-------|---------|-------------|
-| 1 | **Goal** | the definition of done everything else serves … start here |
-| 2 | **Problem** | what recurring work justifies a loop at all, and what stays human |
-| 3 | **Trigger** | how work enters, and what one unit of work is |
-| 4 | **Actions** | what it may touch, and where it runs |
-| 5 | **State** | what it remembers between runs |
-| 6 | **Limits** | when it must stop, regardless |
-| 7 | **Control** | what to do after each result |
-| 8 | **Observability** | what you watch on every run |
-| 9 | **Model & Prompt** | the swappable engine … chosen last, once the harness around it holds |
-
-Position is a second lens: the **goal** sits at the center because everything serves it, **problem** frames the page from the top, **observability** records every run along the bottom.
 
 ## The examples
 
